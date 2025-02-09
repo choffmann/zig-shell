@@ -32,7 +32,15 @@ pub fn main() !void {
                 .env => env(&args),
             };
         } else {
-            try stdout.print("{s}: command not found\n", .{user_input});
+            const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
+            if (try is_in_path(command)) {
+                const argv_buf = [_][]const u8{args.next() orelse ""};
+                var cmd = std.process.Child.init(&argv_buf, allocator);
+                try cmd.spawn();
+                _ = try cmd.wait();
+            } else {
+                try stdout.print("{s}: command not found\n", .{user_input});
+            }
         }
     }
 }
@@ -98,4 +106,28 @@ fn type_cmd(args: *Args) !void {
     }
 
     try stdout.print("{s}: not found\n", .{command});
+}
+
+fn is_in_path(cmd: []const u8) !bool {
+    const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
+    var env_map = try std.process.getEnvMap(allocator);
+    defer env_map.deinit();
+
+    const path = env_map.get("PATH") orelse "";
+    var path_iter = std.mem.splitAny(u8, path, ":");
+
+    while (path_iter.next()) |e| {
+        var dir = std.fs.openDirAbsolute(e, .{ .iterate = true }) catch {
+            continue;
+        };
+
+        var dir_iter = dir.iterate();
+        while (try dir_iter.next()) |d| {
+            if (std.mem.eql(u8, d.name, cmd)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
