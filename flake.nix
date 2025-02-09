@@ -27,7 +27,8 @@
       in {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
-            zigpkgs.master
+            zig_0_13
+            # zigpkgs.master
           ];
         };
       }
