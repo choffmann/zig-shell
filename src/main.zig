@@ -32,10 +32,17 @@ pub fn main() !void {
                 .env => env(&args),
             };
         } else {
-            const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
             if (try is_in_path(command)) {
-                const argv_buf = [_][]const u8{args.next() orelse ""};
-                var cmd = std.process.Child.init(&argv_buf, allocator);
+                const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
+                var argv_list = std.ArrayList([]const u8).init(allocator);
+                defer argv_list.deinit();
+
+                args.reset();
+                while (args.next()) |arg| {
+                    try argv_list.append(arg);
+                }
+
+                var cmd = std.process.Child.init(try argv_list.toOwnedSlice(), allocator);
                 try cmd.spawn();
                 _ = try cmd.wait();
             } else {
