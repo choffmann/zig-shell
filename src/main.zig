@@ -3,18 +3,11 @@ const stdout = std.io.getStdOut().writer();
 const stdin = std.io.getStdIn().reader();
 
 const Command = enum { exit, echo, type };
-
 pub fn parse_command(command: []const u8) ?Command {
-    if (std.mem.eql(u8, command, "exit")) {
-        return Command.exit;
-    }
-
-    if (std.mem.eql(u8, command, "echo")) {
-        return Command.echo;
-    }
-
-    if (std.mem.eql(u8, command, "type")) {
-        return Command.type;
+    inline for (std.meta.fields(Command)) |c| {
+        if (std.mem.eql(u8, command, c.name)) {
+            return @enumFromInt(c.value);
+        }
     }
 
     return null;
@@ -31,9 +24,9 @@ pub fn main() !void {
         const command = args.next() orelse "";
         if (parse_command(command)) |cmd| {
             try switch (cmd) {
-                Command.exit => exit(&args),
-                Command.echo => echo(&args),
-                Command.type => type_cmd(&args),
+                .exit => exit(&args),
+                .echo => echo(&args),
+                .type => type_cmd(&args),
             };
         } else {
             try stdout.print("{s}: command not found\n", .{user_input});
