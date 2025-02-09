@@ -2,7 +2,7 @@ const std = @import("std");
 const stdout = std.io.getStdOut().writer();
 const stdin = std.io.getStdIn().reader();
 
-const Command = enum { exit, echo };
+const Command = enum { exit, echo, type };
 
 pub fn parse_command(command: []const u8) ?Command {
     if (std.mem.eql(u8, command, "exit")) {
@@ -11,6 +11,10 @@ pub fn parse_command(command: []const u8) ?Command {
 
     if (std.mem.eql(u8, command, "echo")) {
         return Command.echo;
+    }
+
+    if (std.mem.eql(u8, command, "type")) {
+        return Command.type;
     }
 
     return null;
@@ -29,6 +33,7 @@ pub fn main() !void {
             try switch (cmd) {
                 Command.exit => exit(&args),
                 Command.echo => echo(&args),
+                Command.type => type_cmd(&args),
             };
         } else {
             try stdout.print("{s}: command not found\n", .{user_input});
@@ -53,4 +58,13 @@ fn echo(args: *std.mem.SplitIterator(u8, .any)) !void {
     }
     try w.print("\n", .{});
     try buf.flush();
+}
+
+fn type_cmd(args: *std.mem.SplitIterator(u8, .any)) !void {
+    const command = args.next() orelse "";
+    if (parse_command(command) != null) {
+        try stdout.print("{s} is a shell builtin\n", .{command});
+    } else {
+        try stdout.print("{s}: not found\n", .{command});
+    }
 }
