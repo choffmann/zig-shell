@@ -4,7 +4,7 @@ const stdin = std.io.getStdIn().reader();
 
 const Args = std.mem.SplitIterator(u8, .any);
 
-const Command = enum { exit, echo, type, env };
+const Command = enum { exit, echo, type, env, pwd };
 pub fn parse_command(command: []const u8) ?Command {
     inline for (std.meta.fields(Command)) |c| {
         if (std.mem.eql(u8, command, c.name)) {
@@ -30,6 +30,7 @@ pub fn main() !void {
                 .echo => echo(&args),
                 .type => type_cmd(&args),
                 .env => env(&args),
+                .pwd => pwd(&args),
             };
         } else {
             if (try is_in_path(command)) {
@@ -71,6 +72,12 @@ fn echo(args: *Args) !void {
     try buf.flush();
 }
 
+fn pwd(_: *Args) !void {
+    var buffer: [std.fs.MAX_NAME_BYTES]u8 = undefined;
+    const cwd = try std.fs.cwd().realpath(".", &buffer);
+    try stdout.print("{s}\n", .{cwd});
+}
+
 fn env(_: *Args) !void {
     const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
 
@@ -79,7 +86,7 @@ fn env(_: *Args) !void {
 
     var iter = env_map.iterator();
     while (iter.next()) |entry| {
-        std.debug.print("{s}={s}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
+        try stdout.print("{s}={s}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
     }
 }
 
