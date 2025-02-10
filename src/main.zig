@@ -4,7 +4,7 @@ const stdin = std.io.getStdIn().reader();
 
 const Args = std.mem.SplitIterator(u8, .any);
 
-const Command = enum { exit, echo, type, env, pwd };
+const Command = enum { exit, echo, type, env, pwd, cd };
 pub fn parse_command(command: []const u8) ?Command {
     inline for (std.meta.fields(Command)) |c| {
         if (std.mem.eql(u8, command, c.name)) {
@@ -31,6 +31,7 @@ pub fn main() !void {
                 .type => type_cmd(&args),
                 .env => env(&args),
                 .pwd => pwd(&args),
+                .cd => cd(&args),
             };
         } else {
             if (try is_in_path(command)) {
@@ -76,6 +77,16 @@ fn pwd(_: *Args) !void {
     var buffer: [std.fs.MAX_NAME_BYTES]u8 = undefined;
     const cwd = try std.fs.cwd().realpath(".", &buffer);
     try stdout.print("{s}\n", .{cwd});
+}
+
+fn cd(args: *Args) !void {
+    const path = args.next() orelse ".";
+    const dir = std.fs.cwd().openDir(path, .{}) catch {
+        try stdout.print("cd: {s}: No such file or directory\n", .{path});
+        return;
+    };
+
+    try dir.setAsCwd();
 }
 
 fn env(_: *Args) !void {
