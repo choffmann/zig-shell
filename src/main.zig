@@ -80,11 +80,24 @@ fn pwd(_: *Args) !void {
 }
 
 fn cd(args: *Args) !void {
-    const path = args.next() orelse ".";
-    const dir = std.fs.cwd().openDir(path, .{}) catch {
-        try stdout.print("cd: {s}: No such file or directory\n", .{path});
-        return;
-    };
+    const path = args.next() orelse "~";
+
+    var dir: std.fs.Dir = undefined;
+    if (std.mem.eql(u8, path, "~")) {
+        const allocator = std.heap.page_allocator;
+
+        var env_map = try std.process.getEnvMap(allocator);
+        defer env_map.deinit();
+
+        const home = env_map.get("HOME").?;
+
+        dir = try std.fs.cwd().openDir(home, .{});
+    } else {
+        dir = std.fs.cwd().openDir(path, .{}) catch {
+            try stdout.print("cd: {s}: No such file or directory\n", .{path});
+            return;
+        };
+    }
 
     try dir.setAsCwd();
 }
