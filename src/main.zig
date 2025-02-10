@@ -16,10 +16,13 @@ pub fn parse_command(command: []const u8) ?Command {
 }
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
     while (true) {
-        var buffer: [1024]u8 = undefined;
         try stdout.print("$ ", .{});
-        const user_input = try stdin.readUntilDelimiter(&buffer, '\n');
+        const user_input = try stdin.readUntilDelimiterAlloc(allocator, '\n', 1024);
 
         var args = std.mem.splitAny(u8, user_input, " ");
 
@@ -28,21 +31,18 @@ pub fn main() !void {
             try switch (cmd) {
                 .exit => exit(&args),
                 .echo => echo(&args),
-                .type => type_cmd(&args),
-                .env => env(&args),
-                .pwd => pwd(&args),
-                .cd => cd(&args),
+                .type => type_cmd(allocator, &args),
+                .env => env(allocator),
+                .pwd => pwd(allocator),
+                .cd => cd(allocator, &args),
             };
         } else {
-            if (try is_in_path(command)) {
-                const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
+            if (try is_in_path(allocator, command)) {
                 var argv_list = std.ArrayList([]const u8).init(allocator);
                 defer argv_list.deinit();
 
                 args.reset();
-                while (args.next()) |arg| {
-                    try argv_list.append(arg);
-                }
+                while (args.next()) |arg| try argv_list.append(arg);
 
                 var cmd = std.process.Child.init(try argv_list.toOwnedSlice(), allocator);
                 try cmd.spawn();
@@ -64,28 +64,22 @@ fn echo(args: *Args) !void {
     var w = buf.writer();
     while (args.next()) |arg| {
         try w.print("{s}", .{arg});
-
-        if (args.peek() != null) {
-            try w.print(" ", .{});
-        }
+        if (args.peek() != null) try w.print(" ", .{});
     }
     try w.print("\n", .{});
     try buf.flush();
 }
 
-fn pwd(_: *Args) !void {
-    var buffer: [std.fs.MAX_NAME_BYTES]u8 = undefined;
-    const cwd = try std.fs.cwd().realpath(".", &buffer);
+fn pwd(allocator: std.mem.Allocator) !void {
+    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     try stdout.print("{s}\n", .{cwd});
 }
 
-fn cd(args: *Args) !void {
+fn cd(allocator: std.mem.Allocator, args: *Args) !void {
     const path = args.next() orelse "~";
 
     var dir: std.fs.Dir = undefined;
     if (std.mem.eql(u8, path, "~")) {
-        const allocator = std.heap.page_allocator;
-
         var env_map = try std.process.getEnvMap(allocator);
         defer env_map.deinit();
 
@@ -102,9 +96,7 @@ fn cd(args: *Args) !void {
     try dir.setAsCwd();
 }
 
-fn env(_: *Args) !void {
-    const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
-
+fn env(allocator: std.mem.Allocator) !void {
     var env_map = try std.process.getEnvMap(allocator);
     defer env_map.deinit();
 
@@ -114,8 +106,7 @@ fn env(_: *Args) !void {
     }
 }
 
-fn type_cmd(args: *Args) !void {
-    const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
+fn type_cmd(allocator: std.mem.Allocator, args: *Args) !void {
     const command = args.next() orelse "";
 
     if (parse_command(command) != null) {
@@ -146,8 +137,7 @@ fn type_cmd(args: *Args) !void {
     try stdout.print("{s}: not found\n", .{command});
 }
 
-fn is_in_path(cmd: []const u8) !bool {
-    const allocator = std.heap.page_allocator; // Allocate a whole page of memory each time we ask for some memory. Very simple, very dumb, very wasteful.
+fn is_in_path(allocator: std.mem.Allocator, cmd: []const u8) !bool {
     var env_map = try std.process.getEnvMap(allocator);
     defer env_map.deinit();
 
